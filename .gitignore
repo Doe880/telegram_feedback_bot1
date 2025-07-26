@@ -24,7 +24,7 @@ exported_messages.xlsx
 # Env and config files
 .env
 *.env
-config.py
+
 
 # IDE files
 .idea/
