@@ -4,4 +4,3 @@ aiohttp
 python-dotenv
 openpyxl
 pandas
-uvloop ; sys_platform != 'win32'
