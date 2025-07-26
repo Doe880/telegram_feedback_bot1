@@ -4,4 +4,4 @@ python-dotenv
 openpyxl
 pandas
 aiohttp
-pydantic==1.10.15
+
