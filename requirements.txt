@@ -1,4 +1,4 @@
-aiogram[web]==3.4.1
+aiogram[web]==3.5.0
 aiofiles
 aiohttp
 python-dotenv
