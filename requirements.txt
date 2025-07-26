@@ -1,0 +1,6 @@
+aiogram==3.5.0
+aiofiles
+python-dotenv
+openpyxl
+pandas
+aiohttp

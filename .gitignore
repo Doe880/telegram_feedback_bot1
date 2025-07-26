@@ -1,0 +1,38 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# SQLite database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Excel exports
+*.xlsx
+*.xls
+
+# Uploaded or downloaded files
+uploads/
+downloads/
+exported_messages.xlsx
+
+# Env and config files
+.env
+*.env
+config.py
+
+# IDE files
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Virtual environment
+venv/
+env/
