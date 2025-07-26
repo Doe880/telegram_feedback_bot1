@@ -1,7 +1,7 @@
 services:
   - type: web
     name: telegram-bot
-    env: python
+    env: python 3.10
     buildCommand: |
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       export PATH="$HOME/.cargo/bin:$PATH"
