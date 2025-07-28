@@ -5,6 +5,7 @@ import aiofiles
 
 logging.basicConfig(filename='bot.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+
 async def save_file(message: Message) -> str:
     file_id = message.document.file_id
     file_name = message.document.file_name
@@ -14,8 +15,9 @@ async def save_file(message: Message) -> str:
     path = Path("uploads") / file_name
     path.parent.mkdir(exist_ok=True)
 
+    # Правильное использование BytesIO без .read()
     async with aiofiles.open(path, "wb") as f:
-        await f.write(file_bytes.read())
+        await f.write(file_bytes.getvalue())  # Используем getvalue() для BytesIO
 
+    logging.info(f"Файл сохранён: {path}")
     return str(path)
-
