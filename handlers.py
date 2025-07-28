@@ -204,6 +204,8 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
         )
 
     for admin in ADMINS:
+        if int(admin) == message.chat.id:
+            continue  # Не отправлять в тот же чат, откуда пришло сообщение
         await message.bot.send_message(admin, text)
         if file_path:
             await message.bot.send_document(admin, types.FSInputFile(file_path))

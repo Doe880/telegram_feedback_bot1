@@ -21,3 +21,5 @@ async def save_file(message: Message) -> str:
 
     logging.info(f"Файл сохранён: {path}")
     return str(path)
+
+
