@@ -224,30 +224,29 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
                 "image/jpeg",
                 "image/png"
             ]:
-                file_path = await save_file(message)
+                file_path = await save_file(message)  # для документов
             else:
-                await message.answer("⛔ Неподдерживаемый тип файла.",
-                                     reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
+                await message.answer(
+                    "⛔ Неподдерживаемый тип файла.",
+                    reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+                )
                 return
         elif message.photo:
-            largest_photo = message.photo[-1]
-            file = await message.bot.get_file(largest_photo.file_id)
-            file_bytes = await message.bot.download_file(file.file_path)
-            path = Path("uploads") / f"{message.from_user.id}_photo.jpg"
-            path.parent.mkdir(exist_ok=True)
-            async with aiofiles.open(path, "wb") as f:
-                await f.write(file_bytes.getvalue())
-            file_path = str(path)
+            file_path = await save_file(message)  # для фото теперь тоже save_file()
         elif message.text and message.text.strip().lower() in ["нет", "no"]:
             file_path = None
         else:
-            await message.answer("Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или введите 'Нет'.",
-                                 reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
+            await message.answer(
+                "Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или введите 'Нет'.",
+                reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+            )
             return
     except Exception as e:
         logging.error(f"Ошибка при сохранении файла: {e}")
-        await message.answer("Произошла ошибка при загрузке файла.",
-                             reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
+        await message.answer(
+            "Произошла ошибка при загрузке файла.",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+        )
         return
 
     await state.update_data(file_path=file_path)
