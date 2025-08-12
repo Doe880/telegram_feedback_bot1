@@ -16,10 +16,7 @@ __pycache__/
 *.xlsx
 *.xls
 
-# Uploaded or downloaded files
-uploads/
-downloads/
-exported_messages.xlsx
+
 
 # Env and config files
 .env
