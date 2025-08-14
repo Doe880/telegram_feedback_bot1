@@ -9,8 +9,8 @@ from admin import router as admin_router
 async def main():
     bot = Bot(token=TOKEN)
     dp = Dispatcher()
-    dp.include_router(admin_router)
     dp.include_router(user_router)
+    dp.include_router(admin_router)
     init_db()
     await dp.start_polling(bot)
 
