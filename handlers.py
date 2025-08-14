@@ -6,8 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from config import ADMINS, MANAGERS
 from database import insert_message, get_user_messages
-from pathlib import Path
-import aiofiles
 from utils import save_file
 import logging
 
@@ -16,6 +14,9 @@ logging.basicConfig(level=logging.INFO)
 
 BACK_TEXT = "⬅ Назад"
 BACK_BTN = KeyboardButton(text=BACK_TEXT)
+
+NO_TEXT = "🚫 Нет"            # Кнопка «Нет»
+NO_BTN = KeyboardButton(text=NO_TEXT)
 
 
 class Form(StatesGroup):
@@ -85,8 +86,10 @@ async def go_back(message: Message, state: FSMContext):
         kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
         await message.answer("Выберите руководителя:", reply_markup=kb)
     elif state_name == "entering_name":
-        kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-                                 resize_keyboard=True, one_time_keyboard=True)
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
+            resize_keyboard=True, one_time_keyboard=True
+        )
         await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     elif state_name == "entering_position":
         await message.answer("Укажите вашу должность:",
@@ -98,8 +101,13 @@ async def go_back(message: Message, state: FSMContext):
         await message.answer("Введите ваше сообщение (до 1000 символов):",
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     elif state_name == "uploading_file":
-        await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или введите 'Нет'.",
-                             reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
+        # ПРИКРЕПИТЕ ФАЙЛ или нажмите «Нет» — кнопка есть
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[NO_BTN], [BACK_BTN]],
+            resize_keyboard=True
+        )
+        await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
+                             reply_markup=kb)
     else:
         await state.clear()
         await state.update_data(history=[])
@@ -132,17 +140,15 @@ async def choose_manager(message: Message, state: FSMContext):
 async def manager_chosen(message: Message, state: FSMContext):
     await push_history(state)
     await state.update_data(recipient=message.text)
-    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-                             resize_keyboard=True, one_time_keyboard=True)
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
     await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     await state.set_state(Form.entering_name)
 
 
-@router.message(F.text.in_({
-    "📢 Общий вопрос",
-    "📝 Написать генеральному директору",
-    "💡 Предложить идею"
-}))
+@router.message(F.text.in_({"📢 Общий вопрос", "📝 Написать генеральному директору", "💡 Предложить идею"}))
 async def choose_type(message: Message, state: FSMContext):
     type_map = {
         "📢 Общий вопрос": "общий",
@@ -155,13 +161,17 @@ async def choose_type(message: Message, state: FSMContext):
 
     if msg_type == "директор":
         # Без анонимности
-        await message.answer("Введите ваше имя и фамилию:",
-                             reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True,
-                                                              one_time_keyboard=True))
+        await message.answer(
+            "Введите ваше имя и фамилию:",
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
+        )
     else:
-        kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-                                 resize_keyboard=True, one_time_keyboard=True)
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
+            resize_keyboard=True, one_time_keyboard=True
+        )
         await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
+
     await state.set_state(Form.entering_name)
 
 
@@ -206,8 +216,14 @@ async def get_message(message: Message, state: FSMContext):
         await message.answer("Слишком длинное сообщение. Пожалуйста, сократите до 1000 символов.")
         return
     await state.update_data(message=message.text)
-    await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или введите 'Нет'.",
-                         reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
+
+    # Переходим к шагу загрузки файла — сразу показываем кнопку «Нет»
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[NO_BTN], [BACK_BTN]],
+        resize_keyboard=True
+    )
+    await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
+                         reply_markup=kb)
     await state.set_state(Form.uploading_file)
 
 
@@ -224,28 +240,29 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
                 "image/jpeg",
                 "image/png"
             ]:
-                file_path = await save_file(message)  # для документов
+                file_path = await save_file(message)  # документы
             else:
                 await message.answer(
                     "⛔ Неподдерживаемый тип файла.",
-                    reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+                    reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
                 )
                 return
         elif message.photo:
-            file_path = await save_file(message)  # для фото теперь тоже save_file()
-        elif message.text and message.text.strip().lower() in ["нет", "no"]:
+            file_path = await save_file(message)     # фото
+        elif message.text and message.text.strip().lower() in ["нет", "no"] or message.text == NO_TEXT:
             file_path = None
         else:
+            # Просим повторить и снова показываем кнопку «Нет»
             await message.answer(
-                "Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или введите 'Нет'.",
-                reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+                "Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
+                reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
             )
             return
     except Exception as e:
         logging.error(f"Ошибка при сохранении файла: {e}")
         await message.answer(
             "Произошла ошибка при загрузке файла.",
-            reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
         )
         return
 
