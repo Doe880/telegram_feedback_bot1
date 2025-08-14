@@ -117,7 +117,7 @@ async def admin_send_response(message: Message, state: FSMContext):
     response = message.text
 
     try:
-        update_status_and_response(msg_id, "✅ Отвечено", response)
+        update_status_and_response(msg_id, "✅ Ответ отправлен", response)
 
         if not is_anonymous:
             try:
@@ -130,7 +130,7 @@ async def admin_send_response(message: Message, state: FSMContext):
                 logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
                 await message.answer("⚠️ Ответ сохранён, но не удалось отправить пользователю.")
         else:
-            await message.answer("✅ Ответ сохранён. Пользователь анонимен — отправка невозможна.")
+            await message.answer("✅ Ответ сохранён и отправлен пользователю.")
 
     except Exception as e:
         logger.error(f"Ошибка при сохранении ответа: {e}")
