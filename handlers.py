@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 BACK_TEXT = "⬅ Назад"
 BACK_BTN = KeyboardButton(text=BACK_TEXT)
 
-NO_TEXT = "🚫 Нет"            # Кнопка «Нет»
+NO_TEXT = "🚫 Нет"
 NO_BTN = KeyboardButton(text=NO_TEXT)
 
 
@@ -41,7 +41,7 @@ def main_menu():
     )
 
 
-# --- History helpers -------------------------------------------------------
+# --- История шагов ---------------------------------------------------------
 async def push_history(state: FSMContext):
     current = await state.get_state()
     if not current:
@@ -69,6 +69,7 @@ async def chat_id(message: types.Message):
     await message.answer(f"Chat ID: {message.chat.id}")
 
 
+# Кнопка «Назад»
 @router.message(F.text == BACK_TEXT)
 async def go_back(message: Message, state: FSMContext):
     prev = await pop_previous(state)
@@ -84,7 +85,7 @@ async def go_back(message: Message, state: FSMContext):
     if state_name == "choosing_manager":
         buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
         kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-        await message.answer("Выберите руководителя:", reply_markup=kb)
+        await message.answer("Выберите руководителя (нажмите кнопку):", reply_markup=kb)
     elif state_name == "entering_name":
         kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
@@ -101,11 +102,7 @@ async def go_back(message: Message, state: FSMContext):
         await message.answer("Введите ваше сообщение (до 1000 символов):",
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     elif state_name == "uploading_file":
-        # ПРИКРЕПИТЕ ФАЙЛ или нажмите «Нет» — кнопка есть
-        kb = ReplyKeyboardMarkup(
-            keyboard=[[NO_BTN], [BACK_BTN]],
-            resize_keyboard=True
-        )
+        kb = ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
         await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
                              reply_markup=kb)
     else:
@@ -132,12 +129,22 @@ async def choose_manager(message: Message, state: FSMContext):
     await push_history(state)
     buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
     kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("Выберите руководителя:", reply_markup=kb)
+    await message.answer("Выберите руководителя (нажмите кнопку):", reply_markup=kb)
     await state.set_state(Form.choosing_manager)
 
 
 @router.message(Form.choosing_manager)
 async def manager_chosen(message: Message, state: FSMContext):
+    # Жёсткая проверка: имя должно быть из списка MANAGERS
+    if message.text not in MANAGERS:
+        buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
+        kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
+        await message.answer(
+            "Пожалуйста, выберите руководителя из списка ниже (нажмите кнопку):",
+            reply_markup=kb
+        )
+        return
+
     await push_history(state)
     await state.update_data(recipient=message.text)
     kb = ReplyKeyboardMarkup(
@@ -160,7 +167,6 @@ async def choose_type(message: Message, state: FSMContext):
     await push_history(state)
 
     if msg_type == "директор":
-        # Без анонимности
         await message.answer(
             "Введите ваше имя и фамилию:",
             reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
@@ -216,12 +222,7 @@ async def get_message(message: Message, state: FSMContext):
         await message.answer("Слишком длинное сообщение. Пожалуйста, сократите до 1000 символов.")
         return
     await state.update_data(message=message.text)
-
-    # Переходим к шагу загрузки файла — сразу показываем кнопку «Нет»
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[NO_BTN], [BACK_BTN]],
-        resize_keyboard=True
-    )
+    kb = ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
     await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
                          reply_markup=kb)
     await state.set_state(Form.uploading_file)
@@ -240,7 +241,7 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
                 "image/jpeg",
                 "image/png"
             ]:
-                file_path = await save_file(message)  # документы
+                file_path = await save_file(message)
             else:
                 await message.answer(
                     "⛔ Неподдерживаемый тип файла.",
@@ -248,14 +249,14 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
                 )
                 return
         elif message.photo:
-            file_path = await save_file(message)     # фото
-        elif message.text and message.text.strip().lower() in ["нет", "no"] or message.text == NO_TEXT:
+            file_path = await save_file(message)
+        elif (message.text and message.text.strip().lower() in ["нет", "no"]) or (message.text == NO_TEXT):
             file_path = None
         else:
-            # Просим повторить и снова показываем кнопку «Нет»
+            kb = ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
             await message.answer(
                 "Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «Нет».",
-                reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
+                reply_markup=kb
             )
             return
     except Exception as e:
@@ -314,3 +315,50 @@ async def show_my_requests(message: Message):
                 entry += f"\n📬 Ответ: {r[4]}"
             result.append(entry)
         await message.answer("\n\n".join(result))
+
+
+# ----------------- УНИВЕРСАЛЬНЫЙ «СТРАХУЮЩИЙ» ХЕНДЛЕР ---------------------
+# Срабатывает, если пользователь пишет не по сценарию (любой текст/контент,
+# который не поймали предыдущие хендлеры).
+@router.message()
+async def fallback(message: Message, state: FSMContext):
+    current = await state.get_state()
+
+    # Особо важный случай: выбор руководителя
+    if current == Form.choosing_manager.state:
+        buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
+        kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
+        await message.answer(
+            "Пожалуйста, выберите руководителя, нажав на кнопку ниже.",
+            reply_markup=kb
+        )
+        return
+
+    # Если мы на шаге ожидания текста — подсказываем формат
+    prompts_by_state = {
+        Form.entering_name.state: "Введите ваше имя и фамилию (или нажмите '🤐 Анонимно').",
+        Form.entering_position.state: "Укажите вашу должность.",
+        Form.anonymous_reason.state: "Напишите причину, почему хотите остаться анонимным.",
+        Form.typing_message.state: "Введите текст сообщения (до 1000 символов).",
+        Form.uploading_file.state: "Прикрепите файл или нажмите «🚫 Нет»."
+    }
+
+    if current in prompts_by_state:
+        # Вернуть подсказку соответствующую шагу
+        if current == Form.uploading_file.state:
+            kb = ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
+        elif current == Form.entering_name.state:
+            kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
+                                     resize_keyboard=True, one_time_keyboard=True)
+        else:
+            kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
+        await message.answer(f"Я вас не понял. {prompts_by_state[current]}", reply_markup=kb)
+        return
+
+    # Во всех остальных случаях — вернуть пользователя в главное меню
+    await state.clear()
+    await state.update_data(history=[])
+    await message.answer(
+        "Я вас не понял. Пожалуйста, используйте кнопки ниже.",
+        reply_markup=main_menu()
+    )
