@@ -1,7 +1,7 @@
 # handlers.py
 from aiogram import Router, F, types
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from config import ADMINS, MANAGERS
@@ -12,13 +12,15 @@ import logging
 router = Router()
 logging.basicConfig(level=logging.INFO)
 
+# <<< ВАЖНО: ограничиваем этот роутер ТОЛЬКО приватными чатами >>>
+router.message.filter(F.chat.type == "private")
+
 BACK_TEXT = "⬅ Назад"
 BACK_BTN = KeyboardButton(text=BACK_TEXT)
-SKIP_TEXT = "❌ Нет"  # Кнопка «Нет» для шага загрузки файла
-SKIP_BTN = KeyboardButton(text=SKIP_TEXT)
+NO_TEXT = "❌ Нет"          # Кнопка «Нет» для пропуска файла
+NO_BTN = KeyboardButton(text=NO_TEXT)
 HELP_TEXT = "❓ Помощь"
 HELP_BTN = KeyboardButton(text=HELP_TEXT)
-
 
 class Form(StatesGroup):
     choosing_manager = State()
@@ -27,7 +29,6 @@ class Form(StatesGroup):
     anonymous_reason = State()
     typing_message = State()
     uploading_file = State()
-
 
 def main_menu():
     return ReplyKeyboardMarkup(
@@ -42,25 +43,7 @@ def main_menu():
         resize_keyboard=True
     )
 
-
-HELP_MESSAGE = (
-    "🆘 *Как пользоваться ботом*\n\n"
-    "1) В главном меню выберите нужное действие:\n"
-    " • *Задать вопрос руководителю* — появится список имён, выберите получателя.\n"
-    " • *Общий вопрос* — обращение без конкретного получателя.\n"
-    " • *Написать генеральному директору* — обращение лично директору (анонимность недоступна).\n"
-    " • *Предложить идею* — отправьте предложение по улучшению.\n"
-    " • *Мои обращения* — посмотрить статусы и ответы по вашим заявкам.\n\n"
-    "2) Далее бот попросит указать *имя и должность*, либо вы можете выбрать *«🤐 Анонимно»* (кроме обращения директору).\n"
-    "   Если анонимно — кратко укажите причину.\n\n"
-    "3) Напишите текст сообщения (до 1000 символов).\n\n"
-    "4) Прикрепите файл (по желанию) или нажмите кнопку *«❌ Нет»*.\n\n"
-    "5) Нажимайте *«⬅ Назад»*, чтобы вернуться на предыдущий шаг.\n\n"
-    "_Если вы отправили произвольный текст вне сценария — бот вернёт вас к нужному шагу и подскажет что делать._"
-)
-
-
-# --- История для «Назад» ---------------------------------------------------
+# --- История для кнопки «Назад» -------------------------------------------
 async def push_history(state: FSMContext):
     current = await state.get_state()
     if not current:
@@ -70,7 +53,6 @@ async def push_history(state: FSMContext):
     if not history or history[-1] != current:
         history.append(current)
         await state.update_data(history=history)
-
 
 async def pop_previous(state: FSMContext):
     data = await state.get_data()
@@ -82,17 +64,26 @@ async def pop_previous(state: FSMContext):
     return prev
 # ---------------------------------------------------------------------------
 
-
 @router.message(Command("chat_id"))
 async def chat_id(message: types.Message):
     await message.answer(f"Chat ID: {message.chat.id}")
 
-
-@router.message(Command("help"))
 @router.message(F.text == HELP_TEXT)
-async def show_help(message: Message):
-    await message.answer(HELP_MESSAGE, parse_mode="Markdown", reply_markup=main_menu())
-
+async def help_text(message: Message):
+    text = (
+        "🧭 Как пользоваться ботом:\n\n"
+        "• Нажмите нужную кнопку в меню:\n"
+        "  ─ «👨‍💼 Задать вопрос руководителю» — выберите руководителя из списка и напишите вопрос.\n"
+        "  ─ «📢 Общий вопрос» — вопрос без адресата, попадёт в общую базу.\n"
+        "  ─ «📝 Написать генеральному директору» — личное обращение, только не анонимно.\n"
+        "  ─ «💡 Предложить идею» — отправьте улучшение/инициативу, можно приложить файл.\n"
+        "  ─ «📂 Мои обращения» — история ваших обращений и ответы (если вы не были анонимны).\n\n"
+        "• В процессе бот спросит имя/должность или предложит «🤐 Анонимно» (кроме сообщения директору).\n"
+        "• Сообщение длиной до 1000 символов. Можно прикрепить файл (pdf, docx, xlsx, jpg, png)\n"
+        "  или нажать «❌ Нет», чтобы пропустить.\n"
+        "• Кнопка «⬅ Назад» возвращает на шаг назад.\n"
+    )
+    await message.answer(text)
 
 # Универсальный «Назад»
 @router.message(F.text == BACK_TEXT)
@@ -109,21 +100,17 @@ async def go_back(message: Message, state: FSMContext):
 
     if state_name == "choosing_manager":
         buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
-        kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
+        kb = ReplyKeyboardMarkup(
+            keyboard=buttons + [[BACK_BTN]],
+            resize_keyboard=True, one_time_keyboard=True
+        )
         await message.answer("Выберите руководителя:", reply_markup=kb)
     elif state_name == "entering_name":
-        # Определим тип, чтобы понять, разрешать ли анонимность
-        data = await state.get_data()
-        if data.get("type") == "директор":
-            kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-            await message.answer("Введите ваше имя и фамилию:", reply_markup=kb)
-        else:
-            kb = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-                resize_keyboard=True,
-                one_time_keyboard=True
-            )
-            await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
+        kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
+            resize_keyboard=True, one_time_keyboard=True
+        )
+        await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     elif state_name == "entering_position":
         await message.answer("Укажите вашу должность:",
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
@@ -134,14 +121,12 @@ async def go_back(message: Message, state: FSMContext):
         await message.answer("Введите ваше сообщение (до 1000 символов):",
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     elif state_name == "uploading_file":
-        kb = ReplyKeyboardMarkup(keyboard=[[SKIP_BTN], [BACK_BTN]], resize_keyboard=True)
         await message.answer("Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «❌ Нет».",
-                             reply_markup=kb)
+                             reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True))
     else:
         await state.clear()
         await state.update_data(history=[])
         await message.answer("Вы вернулись в главное меню.", reply_markup=main_menu())
-
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
@@ -154,40 +139,34 @@ async def start(message: Message, state: FSMContext):
         reply_markup=main_menu()
     )
 
-
 @router.message(F.text == "👨‍💼 Задать вопрос руководителю")
 async def choose_manager(message: Message, state: FSMContext):
     await state.update_data(user_id=message.from_user.id, type="руководитель")
     await push_history(state)
-
     buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
-    kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
+    kb = ReplyKeyboardMarkup(
+        keyboard=buttons + [[BACK_BTN]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
     await message.answer("Выберите руководителя:", reply_markup=kb)
     await state.set_state(Form.choosing_manager)
 
-
 @router.message(Form.choosing_manager)
 async def manager_chosen(message: Message, state: FSMContext):
-    # Проверяем, что выбран из списка
-    if message.text not in MANAGERS:
-        buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
-        kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-        await message.answer("Пожалуйста, выберите руководителя из списка кнопок ниже.", reply_markup=kb)
-        return
-
     await push_history(state)
     await state.update_data(recipient=message.text)
-
     kb = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-        resize_keyboard=True,
-        one_time_keyboard=True
+        resize_keyboard=True, one_time_keyboard=True
     )
     await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     await state.set_state(Form.entering_name)
 
-
-@router.message(F.text.in_({"📢 Общий вопрос", "📝 Написать генеральному директору", "💡 Предложить идею"}))
+@router.message(F.text.in_({
+    "📢 Общий вопрос",
+    "📝 Написать генеральному директору",
+    "💡 Предложить идею"
+}))
 async def choose_type(message: Message, state: FSMContext):
     type_map = {
         "📢 Общий вопрос": "общий",
@@ -200,34 +179,21 @@ async def choose_type(message: Message, state: FSMContext):
 
     if msg_type == "директор":
         # Без анонимности
-        kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-        await message.answer("Введите ваше имя и фамилию:", reply_markup=kb)
+        await message.answer("Введите ваше имя и фамилию:",
+                             reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]],
+                                                              resize_keyboard=True, one_time_keyboard=True))
     else:
         kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-            resize_keyboard=True,
-            one_time_keyboard=True
+            resize_keyboard=True, one_time_keyboard=True
         )
         await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
-
     await state.set_state(Form.entering_name)
-
 
 @router.message(Form.entering_name)
 async def get_name(message: Message, state: FSMContext):
     await push_history(state)
     text = message.text
-
-    data = await state.get_data()
-    msg_type = data.get("type")
-
-    # Если выбрали «директор», а пользователь пытается нажать «Анонимно» — запрещаем
-    if msg_type == "директор" and text == "🤐 Анонимно":
-        kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-        await message.answer("Анонимность недоступна для обращения к генеральному директору. Введите имя и фамилию:",
-                             reply_markup=kb)
-        return
-
     if text == "🤐 Анонимно":
         await state.update_data(is_anonymous=1, name="Аноним", position="Аноним")
         await message.answer("Почему вы хотите остаться анонимным?",
@@ -239,7 +205,6 @@ async def get_name(message: Message, state: FSMContext):
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
         await state.set_state(Form.entering_position)
 
-
 @router.message(Form.entering_position)
 async def get_position(message: Message, state: FSMContext):
     await push_history(state)
@@ -247,7 +212,6 @@ async def get_position(message: Message, state: FSMContext):
     await message.answer("Введите ваше сообщение (до 1000 символов):",
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     await state.set_state(Form.typing_message)
-
 
 @router.message(Form.anonymous_reason)
 async def get_reason(message: Message, state: FSMContext):
@@ -257,7 +221,6 @@ async def get_reason(message: Message, state: FSMContext):
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     await state.set_state(Form.typing_message)
 
-
 @router.message(Form.typing_message)
 async def get_message(message: Message, state: FSMContext):
     await push_history(state)
@@ -265,44 +228,51 @@ async def get_message(message: Message, state: FSMContext):
         await message.answer("Слишком длинное сообщение. Пожалуйста, сократите до 1000 символов.")
         return
     await state.update_data(message=message.text)
-
-    # Предлагаем: либо прислать файл, либо нажать «❌ Нет»
-    kb = ReplyKeyboardMarkup(keyboard=[[SKIP_BTN], [BACK_BTN]], resize_keyboard=True)
+    # Кнопка «❌ Нет» для пропуска файла
     await message.answer(
         "Если хотите, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «❌ Нет».",
-        reply_markup=kb
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
     )
     await state.set_state(Form.uploading_file)
-
 
 @router.message(Form.uploading_file)
 async def handle_file_or_skip(message: Message, state: FSMContext):
     file_path = None
-
     try:
-        # Документ или фото — единая функция save_file
-        if message.document or message.photo:
+        if message.document:
+            if message.document.mime_type in [
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "image/jpeg",
+                "image/png"
+            ]:
+                file_path = await save_file(message)   # сохраняем документ/изображение
+            else:
+                await message.answer("⛔ Неподдерживаемый тип файла.",
+                                     reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True))
+                return
+        elif message.photo:
+            # save_file теперь тоже умеет фото
             file_path = await save_file(message)
-        elif message.text and message.text.strip().lower() in ["нет", "no", SKIP_TEXT.lower(), "❌ нет"]:
+        elif message.text and message.text.strip().lower() in ["нет", "no", NO_TEXT.lower(), "❌ нет"]:
             file_path = None
         else:
-            kb = ReplyKeyboardMarkup(keyboard=[[SKIP_BTN], [BACK_BTN]], resize_keyboard=True)
             await message.answer(
                 "Пожалуйста, прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «❌ Нет».",
-                reply_markup=kb
+                reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
             )
             return
     except Exception as e:
         logging.error(f"Ошибка при сохранении файла: {e}")
-        kb = ReplyKeyboardMarkup(keyboard=[[SKIP_BTN], [BACK_BTN]], resize_keyboard=True)
-        await message.answer("Произошла ошибка при загрузке файла.", reply_markup=kb)
+        await message.answer("Произошла ошибка при загрузке файла.",
+                             reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True))
         return
 
     await state.update_data(file_path=file_path)
     user = await state.get_data()
     msg_id = insert_message(user)
 
-    # Текст уведомления админам
     if user.get("is_anonymous"):
         text = (
             f"📩 Анонимное обращение #{msg_id}\n"
@@ -319,10 +289,10 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
             f"Сообщение:\n{user.get('message','')}"
         )
 
-    # Отправляем админам, но не в тот же чат, откуда пришло
     for admin in ADMINS:
         try:
             if admin == message.chat.id:
+                # не отправляем в тот же чат, откуда пришло
                 continue
             await message.bot.send_message(admin, text)
             if file_path:
@@ -333,7 +303,6 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
     await state.clear()
     await state.update_data(history=[])
     await message.answer("✅ Спасибо! Ваше сообщение отправлено.", reply_markup=main_menu())
-
 
 @router.message(F.text == "📂 Мои обращения")
 async def show_my_requests(message: Message):
@@ -349,54 +318,10 @@ async def show_my_requests(message: Message):
             result.append(entry)
         await message.answer("\n\n".join(result))
 
-
-# --- «Левый» текст: мягко возвращаем в нужный шаг / меню -------------------
-@router.message(F.text & ~F.text.startswith("/"))
-async def fallback_text(message: Message, state: FSMContext):
-    current = await state.get_state()
-    if current:
-        # Пользователь в сценарии, подскажем что делать дальше
-        state_name = current.split(":")[-1]
-        if state_name == "choosing_manager":
-            buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
-            kb = ReplyKeyboardMarkup(keyboard=buttons + [[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-            await message.answer("Пожалуйста, выберите руководителя из списка кнопок ниже.", reply_markup=kb)
-            return
-        elif state_name == "entering_name":
-            data = await state.get_data()
-            if data.get("type") == "директор":
-                kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True, one_time_keyboard=True)
-                await message.answer("Введите ваше имя и фамилию (анонимность недоступна):", reply_markup=kb)
-            else:
-                kb = ReplyKeyboardMarkup(
-                    keyboard=[[KeyboardButton(text="🤐 Анонимно")], [BACK_BTN]],
-                    resize_keyboard=True,
-                    one_time_keyboard=True
-                )
-                await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
-            return
-        elif state_name == "entering_position":
-            kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
-            await message.answer("Укажите вашу должность:", reply_markup=kb)
-            return
-        elif state_name == "anonymous_reason":
-            kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
-            await message.answer("Почему вы хотите остаться анонимным?", reply_markup=kb)
-            return
-        elif state_name == "typing_message":
-            kb = ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True)
-            await message.answer("Введите ваше сообщение (до 1000 символов):", reply_markup=kb)
-            return
-        elif state_name == "uploading_file":
-            kb = ReplyKeyboardMarkup(keyboard=[[SKIP_BTN], [BACK_BTN]], resize_keyboard=True)
-            await message.answer(
-                "Прикрепите файл (pdf, docx, xls, jpg, png) или нажмите «❌ Нет».",
-                reply_markup=kb
-            )
-            return
-
-    # Не в сценарии — покажем помощь и меню
+# --- Fallback: только когда НЕТ состояния и только в приватном чате ---
+@router.message(StateFilter(None))
+async def unknown_private(message: Message):
     await message.answer(
-        "Я не понял сообщение. Пожалуйста, выберите действие в меню или откройте помощь:",
+        "Я не понял сообщение. Пожалуйста, используйте меню ниже:",
         reply_markup=main_menu()
     )
