@@ -22,6 +22,7 @@ NO_BTN = KeyboardButton(text=NO_TEXT)
 HELP_TEXT = "❓ Помощь"
 HELP_BTN = KeyboardButton(text=HELP_TEXT)
 
+
 class Form(StatesGroup):
     choosing_manager = State()
     entering_name = State()
@@ -29,6 +30,7 @@ class Form(StatesGroup):
     anonymous_reason = State()
     typing_message = State()
     uploading_file = State()
+
 
 def main_menu():
     return ReplyKeyboardMarkup(
@@ -43,6 +45,7 @@ def main_menu():
         resize_keyboard=True
     )
 
+
 # --- История для кнопки «Назад» -------------------------------------------
 async def push_history(state: FSMContext):
     current = await state.get_state()
@@ -54,6 +57,7 @@ async def push_history(state: FSMContext):
         history.append(current)
         await state.update_data(history=history)
 
+
 async def pop_previous(state: FSMContext):
     data = await state.get_data()
     history = data.get("history", [])
@@ -64,9 +68,11 @@ async def pop_previous(state: FSMContext):
     return prev
 # ---------------------------------------------------------------------------
 
+
 @router.message(Command("chat_id"))
 async def chat_id(message: types.Message):
     await message.answer(f"Chat ID: {message.chat.id}")
+
 
 @router.message(F.text == HELP_TEXT)
 async def help_text(message: Message):
@@ -84,6 +90,7 @@ async def help_text(message: Message):
         "• Кнопка «⬅ Назад» возвращает на шаг назад.\n"
     )
     await message.answer(text)
+
 
 # Универсальный «Назад»
 @router.message(F.text == BACK_TEXT)
@@ -128,6 +135,7 @@ async def go_back(message: Message, state: FSMContext):
         await state.update_data(history=[])
         await message.answer("Вы вернулись в главное меню.", reply_markup=main_menu())
 
+
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext):
     await state.clear()
@@ -138,6 +146,7 @@ async def start(message: Message, state: FSMContext):
         "Выберите действие:",
         reply_markup=main_menu()
     )
+
 
 @router.message(F.text == "👨‍💼 Задать вопрос руководителю")
 async def choose_manager(message: Message, state: FSMContext):
@@ -151,7 +160,9 @@ async def choose_manager(message: Message, state: FSMContext):
     await message.answer("Выберите руководителя:", reply_markup=kb)
     await state.set_state(Form.choosing_manager)
 
-@router.message(Form.choosing_manager)
+
+# ✅ Корректный выбор руководителя (нажата кнопка из списка MANAGERS)
+@router.message(Form.choosing_manager, F.text.in_(MANAGERS))
 async def manager_chosen(message: Message, state: FSMContext):
     await push_history(state)
     await state.update_data(recipient=message.text)
@@ -161,6 +172,23 @@ async def manager_chosen(message: Message, state: FSMContext):
     )
     await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     await state.set_state(Form.entering_name)
+
+
+# 🚫 Любой другой ввод на шаге выбора руководителя — подсказываем и оставляем в том же состоянии
+@router.message(Form.choosing_manager)
+async def manager_invalid_input(message: Message, state: FSMContext):
+    buttons = [[KeyboardButton(text=name)] for name in MANAGERS]
+    kb = ReplyKeyboardMarkup(
+        keyboard=buttons + [[BACK_BTN]],
+        resize_keyboard=True, one_time_keyboard=True
+    )
+    await message.answer(
+        "Пожалуйста, выберите руководителя из списка ниже кнопкой.\n"
+        "Если хотите начать заново — нажмите /start.",
+        reply_markup=kb
+    )
+    # остаёмся в Form.choosing_manager
+
 
 @router.message(F.text.in_({
     "📢 Общий вопрос",
@@ -190,6 +218,7 @@ async def choose_type(message: Message, state: FSMContext):
         await message.answer("Введите ваше имя и фамилию или нажмите 'Анонимно'.", reply_markup=kb)
     await state.set_state(Form.entering_name)
 
+
 @router.message(Form.entering_name)
 async def get_name(message: Message, state: FSMContext):
     await push_history(state)
@@ -205,6 +234,7 @@ async def get_name(message: Message, state: FSMContext):
                              reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
         await state.set_state(Form.entering_position)
 
+
 @router.message(Form.entering_position)
 async def get_position(message: Message, state: FSMContext):
     await push_history(state)
@@ -213,6 +243,7 @@ async def get_position(message: Message, state: FSMContext):
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     await state.set_state(Form.typing_message)
 
+
 @router.message(Form.anonymous_reason)
 async def get_reason(message: Message, state: FSMContext):
     await push_history(state)
@@ -220,6 +251,7 @@ async def get_reason(message: Message, state: FSMContext):
     await message.answer("Введите ваше сообщение (до 1000 символов):",
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[BACK_BTN]], resize_keyboard=True))
     await state.set_state(Form.typing_message)
+
 
 @router.message(Form.typing_message)
 async def get_message(message: Message, state: FSMContext):
@@ -234,6 +266,7 @@ async def get_message(message: Message, state: FSMContext):
         reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True)
     )
     await state.set_state(Form.uploading_file)
+
 
 @router.message(Form.uploading_file)
 async def handle_file_or_skip(message: Message, state: FSMContext):
@@ -253,7 +286,7 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
                                      reply_markup=ReplyKeyboardMarkup(keyboard=[[NO_BTN], [BACK_BTN]], resize_keyboard=True))
                 return
         elif message.photo:
-            # save_file теперь тоже умеет фото
+            # save_file умеет фото
             file_path = await save_file(message)
         elif message.text and message.text.strip().lower() in ["нет", "no", NO_TEXT.lower(), "❌ нет"]:
             file_path = None
@@ -304,6 +337,7 @@ async def handle_file_or_skip(message: Message, state: FSMContext):
     await state.update_data(history=[])
     await message.answer("✅ Спасибо! Ваше сообщение отправлено.", reply_markup=main_menu())
 
+
 @router.message(F.text == "📂 Мои обращения")
 async def show_my_requests(message: Message):
     rows = get_user_messages(message.from_user.id)
@@ -317,6 +351,7 @@ async def show_my_requests(message: Message):
                 entry += f"\n📬 Ответ: {r[4]}"
             result.append(entry)
         await message.answer("\n\n".join(result))
+
 
 # --- Fallback: только когда НЕТ состояния и только в приватном чате ---
 @router.message(StateFilter(None))
