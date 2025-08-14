@@ -188,7 +188,7 @@ async def manager_invalid_input(message: Message, state: FSMContext):
     )
     await message.answer(
         "Пожалуйста, выберите руководителя из списка ниже кнопкой.\n"
-        "Если хотите начать заново — нажмите /start.",
+        ,
         reply_markup=kb
     )
     # остаёмся в Form.choosing_manager
