@@ -187,7 +187,7 @@ async def manager_invalid_input(message: Message, state: FSMContext):
         resize_keyboard=True, one_time_keyboard=True
     )
     await message.answer(
-        "Пожалуйста, выберите руководителя из списка ниже кнопкой.\n"
+        "Пожалуйста, выберите руководителя из списка нажатием кнопки.\n"
         ,
         reply_markup=kb
     )
