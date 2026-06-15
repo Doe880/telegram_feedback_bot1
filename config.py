@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
+PROXY_URL = os.getenv("PROXY_URL")
 ADMINS = [int(x) for x in os.getenv("ADMINS", "").split(",") if x.strip()]
 MANAGERS = [
     "Бенецкая Наталия",

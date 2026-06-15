@@ -1,6 +1,7 @@
 aiogram==3.5.0
 aiofiles
-aiohttp
+aiohttp==3.9.5
 python-dotenv
 openpyxl
 pandas
+aiohttp-socks==0.8.4
